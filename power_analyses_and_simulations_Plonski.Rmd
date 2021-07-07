@@ -1,12 +1,12 @@
 ---
-title: "Final Project - Advanced Graduate Statistics II (PSY208)"
+title: "Power Analyses: Wayfinding and Subjective Stress Under Time Pressure"
 author: "Paul E. Plonski"
 date: "May 16, 2021"
 output:
   pdf_document: default
   html_document:
     df_print: paged
-subtitle: Tufts University, Spring 2021
+subtitle: "Submitted for Graduate Statistics II, Tufts University, Spring 2021"
 geometry: margin=1.5cm
 ---
 
@@ -1701,7 +1701,7 @@ kbl(df.sim5.p.table, booktabs = T, align = c('r','r','r','r')) %>%
 ```
 
 ## Simulation Conclusion
-The results of simulations one and two suggest that the linear mixed-effects model without a random slope of urgency by participant performed similarly whether or not the slope was present in the simulated data. The results of simulations three through five suggest that there was a chance of concluding a main effect of total time, if there was no true effect in the simulated data, if an interaction was simulated in the data. Specifically, simulation four suggested that if there was a two-way interaction between total time and waiting time on planning time, there was a roughly 50% chance of detecting the effect and a roughly 25% chance of concluding a nonexistent main effect of total time (given that the main effect would only be interpreted in the absence of an interaction and there was a 50% chance of a significant main effect and a significant interaction effect). 
+The results of simulations one and two suggest that the linear mixed-effects model without a random slope of urgency by participant performed similarly whether or not the slope was present in the simulated data. The results of simulations three through five suggest that there was a chance of concluding a main effect of total time, if there was no true effect in the simulated data, if an interaction was simulated in the data. Specifically, simulation four suggested that if there was a two-way interaction between total time and waiting time on planning time, there was a roughly 50% chance of detecting the effect and a roughly 25% chance of concluding a nonexistent main effect of total time (given that the main effect would only be interpreted in the absence of an interaction and there was a 50% chance of a significant main effect and a significant interaction effect). Importantly, these conclusions were based on simulated analyses using purely hypothetical parameters.
 
 
 
