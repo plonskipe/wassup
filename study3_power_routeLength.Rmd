@@ -1,0 +1,2650 @@
+---
+title: "Power Analysis for Study 3 Based on the Route Length Outcome"
+subtitle: "Parameters Estimated From N = 185 When Possible"
+author: "Paul E. Plonski"
+date: "August 18, 2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+geometry: margin=1.5cm
+---
+
+<br><br>
+
+```{r, echo = FALSE}
+# knitr::opts_chunk$set(echo = FALSE, results = "hide", include = FALSE, eval = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r, message=FALSE}
+#### settings ####
+
+# clear workspace  
+rm(list=ls(all=TRUE)) 
+
+# set seed
+set.seed(09012020)
+
+# function to detach all non-essential packages (to avoid interference)
+detachAllPackages <- function() { 
+  # store basic packages' names in a list
+  basic.packages <- c("package:stats","package:graphics","package:grDevices",
+                      "package:utils","package:dataSets","package:methods",
+                      "package:base")  
+  # make list of all loaded packages
+  package.list <- search()[ifelse(unlist(gregexpr("package:",search()))==1,
+                                  TRUE,
+                                  FALSE)]
+  # remove basic packages from the list
+  package.list <- setdiff(package.list,basic.packages)
+  # detach all packages still on the list
+  if (length(package.list)>0) {
+    for (package in package.list) detach(package, character.only=TRUE)
+  }
+}
+# detach all packages
+detachAllPackages()
+# remove function
+rm(detachAllPackages)
+
+#### load packages ####
+# gg plots
+library(ggplot2)
+# gg themes
+library(ggthemes)
+# data table
+library(data.table)
+# type II and III sums of squares
+library(car)
+# linear mixed models - 
+library(lmerTest)
+# multivariate random samples
+library(MASS)
+# for printing tables
+library(kableExtra)
+# for multiple plots (like cowplot)
+library(egg)
+# to calculate ICC
+library(performance)
+
+
+# function to calc the proportion of ps < 0.050
+propFun <- function(x){mean(x<.050)}
+
+
+```
+# Part One
+## Introduction
+This study is designed to test the effects of time pressure on wayfinding in novel, 2-D environments. Wayfinding refers to the planning and decision making aspects of spatial navigation. This study will add to the corpus of research examining the link between time pressure and performance in spatial domains. Importantly, time pressure will be manipulated in three ways to distinguish between the effects temporal constraints, temporal losses, and urgency messaging.  
+
+## Methods
+Up to 300 participants will be assigned to one of four groups, in a 2x2 between-subjects design. They will receive either 35 or 25 total minutes to complete the task and have "shorter" or "longer" waiting periods during the task. The design is such that participants in the 35 minute total time condition with long waiting periods will have approximately the same amount of time as participants in the 25 minute total time condition with short waiting periods. A single within-subjects factor will manipulate urgency messaging at the trial level, with approximately half of the trials designated "urgent" and half "not urgent".  
+Participants will see a novel 2-D environment during each trial (i.e., an image of a map) with the starting point, ending point, and any waypoints marked. Maps will be shown in a random order and not repeated; participants will complete as many maps as possible in the allotted time. Participants will not all see the same maps, and they may see different numbers of maps.  
+The performance outcome used in this script is route length.  Route length refers to the euclidian distance of the x-y coordinates recorded while the left mouse/trackpad button is held down while the participant traces each route.  The hypothesis for route length is that each of the time pressure manipulations, as well as their interactions, will lead to increases in route length.  This script currently models only main effects and a single two-way interaction (total time x wait time).  
+
+### Data Parameters
+1. Each of the 3 main fixed effect and the interaction between total time x wait time were simulated as 1.75, which represents *d* = 0.5, based on the pilot data from 185 *mocha* participants.  
+2. The intercept (baseline route length with no time pressure) was 11.0.  
+3. The standard deviation for participant intercept was 3.57 (based on existing data).  
+4. The standard deviation for map intercept was 3.04 (based on existing data).  
+5. The standard deviation of the random slope for urgency was 1.5 (hypothetical).  
+6. The correlation between participant intercept and random slope for urgency was 0.3 (hypothetical).  
+7. The standard deviation of residual errors was 2.65 (based on existing data).  
+8. The number of maps completed was *M* = 40, *SD* = 20 in existing data  These statistics were used for the middle two conditions, with 5 maps added to the "most time" condition and 5 taken away from the "least time" condition.  
+9. If the number of trials completed was less than 5, it was set to a random distribution with *M* = 15 and *SD* = 2.  
+10. If the number was less than 10 after this transformation, it was set to that number multipled by half of itself (nummaps * nummaps/2).  
+11. 40% of trials were set to be "not urgent" and 60% "urgent".  
+
+
+*Note.* The other performance outcome is the planning time.  Planning time refers to the time that participants spend looking at each map at the beginning of the trial before they begin tracing a route. The hypothesis for planning time is that each of the time pressure manipulations, as well as their interactions, will lead to reductions in planning time.  See the other power analyses for a discussion of planning time.
+
+
+
+## Data Analysis
+The simulated data were analyzed with a linear mixed-effects model. Each of the time pressure manipulations was a fixed effect factor. Random intercepts were included for each participant and each map and a random slope between the random intercept for each participant and the within-subject effect of urgency was included in the model.  
+
+```{r}
+#################
+# Simulate Data #
+#################
+
+#### set parameters ####
+# initialize parameter list
+params <- list()
+# set the raw effect size for main effects
+raw_effect <- 1.75
+# fixed effects intercept
+# the mean value at level 1
+params$beta.0 <- 11.0
+# fixed effects slope
+# the difference between the mean values of 35 mins and 25 mins
+params$beta.1 <- raw_effect
+# the difference between the mean values of short waits and long waits
+params$beta.2 <- raw_effect
+# the difference between the mean values of urgent and non-urgent trials
+params$beta.3 <- raw_effect
+# slope of the fourth predictor, the interaction between total time and wait time
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits or vice versa
+params$beta.4 <- raw_effect
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- 0
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- 0
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- 0
+# standard deviation of the first random intercept, participant ID
+params$sigma.u.0 <- 3.57
+# standard deviation of the second random intercept, map ID
+params$sigma.u.1 <- 3.04
+# standard deviation of the random slope
+params$sigma.u.3 <- 1.5
+# correlation between the random intercept for ID the random slope of predictor 3|ID (urgency)
+params$cor.u.0.u.3 <- 0.3
+# standard deviation of the residual errors
+params$sigma.epsilon <- 2.65
+# sample size
+params$n <- 300
+# number of repetitions per condition
+params$n.reps <- 120
+
+# make DT with all combinations of total time & wait time (b/w Ss conditions)
+DT.bw.fact <- CJ(totTime = factor(c('35mins','25mins')),
+         waitTime = factor(c('shortWaits','longWaits')))
+# set the reference levels for the between-subject factors
+DT.bw.fact <- within(DT.bw.fact, totTime <- relevel(totTime, ref = '35mins'))
+DT.bw.fact <- within(DT.bw.fact, waitTime <- relevel(waitTime, ref = 'shortWaits'))
+
+```
+
+```{r}
+#### simulate data ####
+# make data.table with b/w Ss conditions and all participant IDs
+DT.bw <- cbind(CJ(ID = factor(paste('S', 1:params$n, sep = ''))), DT.bw.fact)
+# make DT with all map ID numbers (up to 100) for each Ss
+DT.map <- CJ(ID = factor(paste('S', 1:params$n, sep = '')),
+             mapID = as.character(factor(paste('Map', 1:params$n.reps))))
+# merge the participant ID with b/w Ss conditions and map ID DTs by participant ID
+DT.merge <- merge(DT.bw, DT.map, by = "ID")
+# make new DT by drawing one random intercept for each map ID and 
+# merging with the previous DT that has pID, mapID, and b/w Ss conditions
+# - there will be 120 rows for each participant with a random intercept for each map
+DT <- merge(DT.merge, 
+             data.table(mapID = unique(DT.merge$mapID), 
+                        u.1.i = rnorm(params$n.reps, 0, params$sigma.u.1)), 
+             by = 'mapID')
+# draw a random intercept and a random slope for each participant
+# the random slope is for the w/in Ss effect of urgency messaging
+DT <- merge(DT, 
+            data.table(ID = unique(DT$ID),
+                       setNames(data.table(
+                         mvrnorm(params$n,
+                                 mu = c(0,0),
+                                 Sigma=rbind(c(params$sigma.u.0^2, 
+                                               params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                  params$sigma.u.3),
+                                             c(params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                  params$sigma.u.3, 
+                                               params$sigma.u.3^2)
+                                 ))), 
+                         c('u.0.i', 'u.3.i'))
+            ),
+            by = 'ID')
+# generate a number of trials completed based on bw Ss conditions
+for (i in unique(DT$ID)){
+  loopIdData <- DT[which(DT$ID==i),] # row for each pID
+  tempTotCond <- loopIdData$totTime[1] # total time condition
+  tempWaitCond <- loopIdData$waitTime[1] # wait time condition
+  
+  # set a random normal number of maps for participant i based on condition
+  if (tempTotCond == "35mins" & tempWaitCond == "shortWaits"){
+    nummaps <- trunc(rnorm(n=1, mean=45, sd=20))}
+  if ((tempTotCond == "35mins" & tempWaitCond == "longWaits") |
+      (tempTotCond == "25mins" & tempWaitCond == "shortWaits")){
+    nummaps <- trunc(rnorm(n=1, mean=40, sd=20))}
+  if (tempTotCond == "25mins" & tempWaitCond == "longWaits"){
+    nummaps <- trunc(rnorm(n=1, mean=35, sd=20))
+    # adjust the number of maps if rnorm drew less than 5 total maps
+    if (nummaps < 5){
+      nummaps = rnorm(1,mean=15,sd=2)
+    }
+    # adjust the number of maps if rnorm or the previous adjustment drew less than 10 total maps
+    if (nummaps < 10){
+      nummaps <- nummaps*(nummaps/2)
+    }
+  }
+  # add number of maps to column
+  DT$nummaps[ DT$ID == i ] <- rep(nummaps,120)
+}
+# drop trials so each Ss has the correct number of map trials
+DT <- subset(DT, as.integer(substr(mapID,5,nchar(mapID))) <= nummaps)
+# add the random urgency condition (40% not urgent, 60% urgent)
+DT[, urgency_num := (sample(c(0,1), replace=TRUE, size=nrow(DT), prob = c(0.4, 0.6)))]
+# create a factor urgency
+DT[, urgency := factor(ifelse(urgency_num==1, 'urgent','not_urgent')),]
+# set reference level for urgency
+DT$urgency <- factor(DT$urgency, levels = c('not_urgent', 'urgent'))
+# this is another way to set levels
+## DT$urgency <- relevel(DT$urgency, 'urgent') 
+# draw random residuals for every observation
+DT[, e.ij := rnorm(.N, 0, params$sigma.epsilon)]
+# calculate simulated outcome
+DT[, y := abs(params$beta.0 + 
+     params$beta.1 * (totTime == '25mins') +
+     params$beta.2 * (waitTime == 'longWaits') +
+     params$beta.3 * (urgency == 'urgent') +
+     params$beta.4 * (totTime == '25mins') * (waitTime == 'longWaits') +
+     params$beta.5 * (totTime == '25mins') * (urgency == 'urgent') +
+     params$beta.6 * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     params$beta.7 * (totTime == '25mins') * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     u.0.i + 
+     u.1.i +
+     u.3.i * (urgency == 'urgent') +   
+     e.ij)]
+```
+
+```{r fit model}
+#### fit model ####
+# calculate random intercepts model (check estimates of fixed and random effects)
+model0 <- lmer(y ~ totTime*waitTime*urgency + (urgency|ID) + (1|mapID), data = DT)
+# store model summary
+model.summary <- summary(model0)
+print(model.summary)
+# store tests of significance
+model.pvalues <- anova(model0, type = 2)
+print(model.pvalues)
+# ICC for participant and map will be hand-calculated because a random slope is included
+# print(icc(model = model0, by_group = T))
+
+```
+
+```{r}
+#### make a table of LMM output ####
+
+# rename variables in the Anova output
+names(model.pvalues) <- c("SumSq", "MeanSq", "NumDF", "DenDF", "Fvalue", "pvalue")
+# make df with model statistics
+# format numbers to 2 digits after decimal
+# and p-values to publication style 
+# !when the matrix is first made!
+df.table <- cbind(format(round(model.summary$coefficients[2:8],2), nsmall = 2),
+                  format(round(model.pvalues$Fvalue[1:7],2), nsmall = 2),
+                  format.pval(model.pvalues$pvalue[1:7], eps = .001, digits = 2))
+
+# set row names
+df.table <- cbind(c("Less Total Time (b/w)", "Longer Wait Times (b/w)", "Urgent Message (w/in)",
+              "Total Time X Wait Time", "Total Time X Urgency", "Wait Time X Urgency",
+              "Total Time X Wait Time X Urgency"), df.table)
+
+# set column names
+colnames(df.table) <- c("Predictor", "Coefficient", "F-value", "p-value")
+```
+
+
+  
+Table 1  
+```{r}
+
+kbl(df.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Fixed effects and interactions in the linear mixed-effects model.",
+             general_title = "Note.", footnote_as_chunk = T)
+```
+
+
+```{r}
+#### generate predictions ####
+# store estimated fixed and random effects in the data.table
+DT[, y.hat := fitted(lmer(y ~ totTime*waitTime*urgency + (urgency|ID) + (1|mapID), data = DT)) ]
+
+# add a condition variable
+DT[, condition := factor(paste(totTime, waitTime, urgency)),]
+# set order of factor levels
+DT$condition <- factor(DT$condition, 
+                       levels = c("35mins shortWaits not_urgent", "35mins shortWaits urgent",
+                                  "35mins longWaits not_urgent", "35mins longWaits urgent",
+                                  "25mins shortWaits not_urgent", "25mins shortWaits urgent", 
+                                  "25mins longWaits not_urgent", "25mins longWaits urgent"))
+# rename factor levels for X labels in plotting
+levels(DT$condition) <- list("4:NotUrg" = "35mins shortWaits not_urgent",
+                             "4:Urg" = "35mins shortWaits urgent",
+                             "3:NotUrg" = "35mins longWaits not_urgent",
+                             "3:Urg" = "35mins longWaits urgent",
+                             "2:NotUrg" = "25mins shortWaits not_urgent",
+                             "2:Urg" = "25mins shortWaits urgent",
+                             "1:NotUrg" = "25mins longWaits not_urgent",
+                             "1:Urg" = "25mins longWaits urgent")
+
+#### aggregate data ####
+# aggregate participant data
+DT.agg.subj.w <- DT[, list(y.subj.mean = mean(y),
+                         y.hat.subj.mean = mean(y.hat)),
+                  by = .(ID, totTime, waitTime, urgency)]
+# add condition variable (all 6 conditions)
+DT.agg.subj.w[, condition := factor(paste(totTime, waitTime, urgency)),]
+
+# aggregate group data
+DT.agg.group <- DT.agg.subj.w[, list(y.group.mean = mean(y.subj.mean),
+                                   y.hat.group.mean = mean(y.hat.subj.mean)),
+                            by = .(totTime, waitTime, urgency)]
+# add condition variable (all 6 conditions)
+DT.agg.group[, condition := factor(paste(totTime, waitTime, urgency)),]
+# set levels for aggregated data
+levels(DT.agg.group$condition) <- list("4:NotUrg" = "35mins shortWaits not_urgent",
+                                       "4:Urg" = "35mins shortWaits urgent",
+                                       "3:NotUrg" = "35mins longWaits not_urgent",
+                                       "3:Urg" = "35mins longWaits urgent",
+                                       "2:NotUrg" = "25mins shortWaits not_urgent",
+                                       "2:Urg" = "25mins shortWaits urgent",
+                                       "1:NotUrg" = "25mins longWaits not_urgent",
+                                       "1:Urg" = "25mins longWaits urgent")
+```
+
+```{r}
+#### graphics ####
+# set up structure of the plot
+gp <- ggplot(DT, aes(x = condition, y = y, 
+                     color = condition))
+# add a point at each simulated value
+gp <- gp + geom_point(size = 2, 
+                      position = position_jitter(width = 0.5, 
+                                                 seed = 123))
+# add a point at each model prediction
+gp <- gp + geom_point(aes(y = y.hat), size = 3, shape = 4, 
+                      position = position_jitter(width = 0.5, 
+                                                 seed = 123))
+# add group mean values as segments
+gp <- gp + geom_segment(data = DT.agg.group, 
+                        mapping=aes(x = condition, y = y.group.mean, 
+                                    xend=..x.. + 0.4, yend=..y..),
+                        size = 2, color = c('black','black','black','black',
+                                            'black','black','black','black'))
+# set colors
+gp <- gp + scale_color_manual(name = "Condition",
+                              labels = c('35/S/NU', '35/S/U',
+                                         '35/L/NU', '35/L/U',
+                                         '25/S/NU', '25/S/U',
+                                         '25/L/NU', '25/L/U'),
+                              values = c('blue', 'skyblue', 
+                                         'darkgreen', 'palegreen2',
+                                         'gold', 'sienna1',
+                                         'red', 'pink2'))
+# add labels
+gp <- gp + xlab("Condition")
+gp <- gp + ylab("Route Length")
+# add caption
+gp <- gp + labs(caption = "Route length for each time pressure condition. \n
+                Group 4: More total time, shorter waits \n
+                Group 3: More total time, longer waits \n
+                Group 2: Less total time, shorter waits \n
+                Group 1: Less total time, longer waits")
+# add theme and font size
+gp <- gp + theme_bw(14)
+# remove ugly lines
+gp <- gp + theme(axis.ticks = element_blank(),
+                 panel.border = element_blank(),
+                 panel.grid.minor = element_blank(),
+                 panel.grid.major.x = element_blank(),
+                 plot.caption = element_text(hjust = 0, lineheight = 0.5))
+# move legend
+gp <- gp + theme(legend.position = 'right')
+```
+Figure 1  
+```{r fig.width=7, fig.height=5}
+# show plot
+print(gp)
+```
+
+## Discussion
+The simulation successfully modeled the expected data, based on the parameters derived from *n* = 185 mocha participants and hypothesized for the urgency condition. The ICCs from the performance package are not accurate, because a random slope is included (ICC_ID = 0.373; ICC_mapID = 0.296). As expected, both random effects are present and map accounts for less variance than participant.  
+
+
+# Part Two
+## Simulation Report One
+Three sample sizes were simulated; *N* = 30, 200, and 300. The purpose of the simulation was to determine the power to detect significant main effects and a significant two-way interaction between total time and waiting time. The simulation additionally determined the probability of detecting false positive interaction effects (urgency x total time; urgency x wait time; urgency x total time x wait time) and evaluated the estimation error. Type 2 sum of squares with Sattherwaite approximations was used to test statistical significance. Type 3 sum of squares would be used when reporting significant interaction parameters.
+
+The main effects of each time pressure manipulation appeared in roughly 99% or more of the simulations for *N* = 200 and *N* = 300 (Table 2). The two-way interaction between the between-subjects effects was not adequately powered, even with the largest proposed sample size, *N* = 300 (47%).  
+
+The two-way interactions between either total time or wait time (between-subjects) and urgency (within-subjects) were not included in the model and the likelihood of detecting a an effect that does not exist was 6% or less. The three-way interaction was also not included in the simulated data and there was a 7% chance of falsely concluding that it was significant.  Figure 2 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time and the three-way interaction of the time pressure manipulations. Figure 3 displays the estimation error for each simulation of the two interactions. Table 3 contains the average estimation error.  
+```{r}
+###############################################
+####       function to simulate data       ####
+# With Random Slope for Participant ~ Urgency #
+# and all possible interactions               #
+###############################################
+LMM.sim.slope <- function(DT.bw.fact, params, n){
+  
+# make DT with bw Ss conditions and IDs
+suppressWarnings(DT.bw <- cbind(CJ(ID = factor(paste('S', 1:n, sep = ''))), DT.bw.fact))
+
+# make DT with all map numbers for each Ss
+DT.map <- CJ(ID = factor(paste('S', 1:n, sep = '')),
+             mapID = as.character(factor(paste('Map', 1:params$n.reps))))
+
+# merge DT bw and DT maps
+DT.merge <- merge(DT.bw, DT.map, by = "ID")
+  
+# draw one random intercept for each mapID and add it to the data.table
+# by using merge the one random intercept per mapID will be added to each
+# observation belonging to that mapID
+DT <- merge(DT.merge, 
+             data.table(mapID = unique(DT.merge$mapID), 
+                        u.1.i = rnorm(params$n.reps, 0, params$sigma.u.1)), 
+             by = 'mapID')
+# draw one random intercept and one random slope from a multivariate normal dist
+# for each pID and add it to the data.table
+# by using merge the one random intercept and slope per pID will be added to each
+# observation belonging to that participant
+DT <- merge(DT, 
+           data.table(ID = unique(DT$ID),
+                      setNames(data.table(
+                        mvrnorm(n,
+                                mu = c(0,0),
+                                Sigma=rbind(c(params$sigma.u.0^2, 
+                                              params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3),
+                                            c(params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3, 
+                                              params$sigma.u.3^2)
+                                ))), 
+                        c('u.0.i', 'u.3.i'))
+           ),
+           by = 'ID')
+ 
+# generate a number of trials completed based on bw Ss conditions
+for (i in unique(DT$ID)){
+   loopIdData <- DT[which(DT$ID==i),]
+   tempTotCond <- loopIdData$totTime[1]
+   tempWaitCond <- loopIdData$waitTime[1]
+   
+   # set a random normal number of maps for participant i based on condition
+   if (tempTotCond == "35mins" & tempWaitCond == "shortWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=45, sd=20))}
+   if ((tempTotCond == "35mins" & tempWaitCond == "longWaits") |
+       (tempTotCond == "25mins" & tempWaitCond == "shortWaits")){
+     nummaps <- trunc(rnorm(n=1, mean=40, sd=20))}
+   if (tempTotCond == "25mins" & tempWaitCond == "longWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=35, sd=20))
+     # if map number is too low, set it higher
+     if (nummaps < 5){
+       nummaps = rnorm(1,mean=15,sd=2)
+     }
+    # if the random higher is still too low, one more time
+    if (nummaps < 10){
+      nummaps <- nummaps*(nummaps/2)
+ }
+}
+# add a number of maps to column
+DT$nummaps[ DT$ID == i ] <- rep(nummaps,120)
+
+}
+
+# drop trials so each Ss has the correct number of map trials
+DT <- subset(DT, as.integer(substr(mapID,5,nchar(mapID))) <= nummaps)
+
+# add the urgency condition
+DT[, urgency_num := (sample(c(0,1), 
+                            replace=TRUE, 
+                            size=nrow(DT), 
+                            prob = c(0.4, 0.6)))]
+
+# create a factor urgency
+DT[, urgency := factor(ifelse(urgency_num==1, 'urgent','not_urgent')),]
+# set the reference level for urgency
+DT$urgency <- factor(DT$urgency, levels = c('not_urgent', 'urgent'))
+
+# draw random residuals for every observation
+DT[, e.ij := rnorm(.N, 0, params$sigma.epsilon)]
+# calculate simulated outcome
+DT[, y := abs(params$beta.0 + 
+     params$beta.1 * (totTime == '25mins') +
+     params$beta.2 * (waitTime == 'longWaits') +
+     params$beta.3 * (urgency == 'urgent') +
+     params$beta.4 * (totTime == '25mins') * (waitTime == 'longWaits') +
+     params$beta.5 * (totTime == '25mins') * (urgency == 'urgent') +
+     params$beta.6 * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     params$beta.7 * (totTime == '25mins') * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     u.0.i + 
+     u.1.i +
+     u.3.i * (urgency == 'urgent') +
+     e.ij)]
+
+
+#### fit model to the simulated data ####
+
+#### estimate the model of the simulated data ####
+
+# the models can fail to converge, thus, they are wrapped in a try and catch block
+tryCatch(
+  {
+    # calculate random intercept model (check estimates of fixed and random effects)
+    lmermodel <- lmer(y ~ totTime*waitTime*urgency + (urgency|ID) + (1|mapID), data = DT)
+    #print(linearMixedEffectsModel <- lmer(y ~ x1 * x2 + (x1 + x2 | ID), data = DT))
+  },
+  # in case that an error occurred, the model could would not even be estimated
+  error = function() {
+    # write out error message
+    message("The model could not be estimated. Collect more data!")
+  }
+)
+
+# set count variable for singular error
+singular_error_count <- 0
+# set count variable for convergence error
+convergence_error_count <- 0
+
+# check if the model was calculated
+if (exists('lmermodel')) {
+  # check for the absence of warning messages
+  if (is.null(lmermodel@optinfo$conv$lme4$messages)){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # check for a singular fit
+  } else if (is.null(lmermodel@optinfo$conv$lme4$code)){
+    # check for singular fit
+    if (lmermodel@optinfo$conv$lme4$messages == "boundary (singular) fit: see ?isSingular") {
+      # write out error message
+      message("The model is singular, the random effects are too complex to be fitted. Collect more data!")
+      singular_error_count <- singular_error_count + 1
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    } else {
+      # write out error message
+      message("You are having problems I did not foresee!")
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    }
+    # check for further convergence issues
+  } else if (lmermodel@optinfo$conv$lme4$code == -1){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # write out warning message
+    message("There are convergence issues. Try to rescale the data or collect more data!")
+    convergence_error_count <- convergence_error_count + 1
+  } else {
+    # write out error message
+    message("You are having problems I did not foresee!")
+    # store NAs rather than the fitted data
+    DT[, y.hat := NA]
+  }
+} else { # if the model does not exist
+  # store NAs rather than the fitted data
+  DT[, y.hat := NA]
+}
+
+lmer.eval <- summary(lmermodel)
+lmer.pvalue <- anova(lmermodel, type = 2)
+
+# store parameters of interest from simulation and original values
+# combine with previous simulation results
+temp_list <- list(
+  totTime.estimate = lmer.eval$coefficients[2],
+  totTime.t.value = lmer.eval$coefficients[2, "t value"],
+  totTime.p.value = lmer.pvalue$`Pr(>F)`[1],
+  
+  waitTime.estimate = lmer.eval$coefficients[3],
+  waitTime.t.value = lmer.eval$coefficients[3, "t value"],
+  waitTime.p.value = lmer.pvalue$`Pr(>F)`[2],
+  
+  urgency.estimate = lmer.eval$coefficients[4],
+  urgency.t.value = lmer.eval$coefficients[4, "t value"],
+  urgency.p.value = lmer.pvalue$`Pr(>F)`[3],
+  
+  totXwait.estimate = lmer.eval$coefficients[5],
+  totXwait.t.value = lmer.eval$coefficients[5, "t value"],
+  totXwait.p.value = lmer.pvalue$`Pr(>F)`[4],
+  
+  totXurg.estimate = lmer.eval$coefficients[6],
+  totXurg.t.value = lmer.eval$coefficients[6, "t value"],
+  totXurg.p.value = lmer.pvalue$`Pr(>F)`[5],
+  
+  waitXurg.estimate = lmer.eval$coefficients[7],
+  waitXurg.t.value = lmer.eval$coefficients[7, "t value"],
+  waitXurg.p.value = lmer.pvalue$`Pr(>F)`[6],
+  
+  totXwaitXurg.estimate = lmer.eval$coefficients[8],
+  totXwaitXurg.t.value = lmer.eval$coefficients[8, "t value"],
+  totXwaitXurg.p.value = lmer.pvalue$`Pr(>F)`[7],
+  
+  sigma.estimate = lmer.eval$sigma
+)
+
+}
+```
+
+```{r eval = F}
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   'totXurg.estimate', 'totXurg.t.value', 'totXurg.p.value',
+                   'waitXurg.estimate', 'waitXurg.t.value', 'waitXurg.p.value',
+                   'totXwaitXurg.estimate', 'totXwaitXurg.t.value', 'totXwaitXurg.p.value',
+                   'sigma.estimate') := 
+                 LMM.sim.slope(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       totXurg_estimation_error = totXurg.estimate - params$beta.5,
+                       waitXurg_estimation_error = waitXurg.estimate - params$beta.6,
+                       totXwaitXurg_estimation_error = totXwaitXurg.estimate - params$beta.7,
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+#write.csv(DT.sim.results, "DT_sim_routeLength_power_results.csv")
+```
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results <- data.table(read.csv("DT_sim_routeLength_power_results.csv"))
+# set a factor to plot by sample size
+DT.sim.results[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error <- DT.sim.results[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+                                               "totXurg_estimation_error",
+                                               "waitXurg_estimation_error",
+                                               "totXwaitXurg_estimation_error",
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props <- DT.sim.results[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value",
+                                               "totXurg.p.value",
+                                               "waitXurg.p.value",
+                                               "totXwaitXurg.p.value"),
+                                   by = n]
+```
+  
+Table 2 - Main Effects and totXwait Interaction  
+  
+```{r}
+df.sim1.p.table <- format(round(DT.summary.props,2), nsmall=2)
+# set column names
+colnames(df.sim1.p.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg")
+# table of p value proportions
+kbl(df.sim1.p.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way <- ggplot(DT.sim.results)
+# add histograms
+gp.hist.2way <- gp.hist.2way + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way <- gp.hist.2way + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way <- gp.hist.2way + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way <- gp.hist.2way + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way <- gp.hist.2way + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.2way <- gp.hist.2way + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way <- gp.hist.2way + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way <- gp.hist.2way + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way <- gp.hist.2way + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way <- ggplot(DT.sim.results)
+# add histograms
+gp.hist.3way <- gp.hist.3way + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way <- gp.hist.3way + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way <- gp.hist.3way + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way <- gp.hist.3way + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way <- gp.hist.3way + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way <- gp.hist.3way + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way <- gp.hist.3way + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way <- gp.hist.3way + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way <- gp.hist.3way + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 2 - Main Effects and totXwait Interaction  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way, gp.hist.3way)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim1 <- ggplot(DT.sim.results, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + geom_violin()
+# add data
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim1 <- gp.violin.esti2.sim1 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r}
+### 3-way effect ###
+gp.violin.esti3.sim1 <- ggplot(DT.sim.results, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + geom_violin()
+# add data
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim1 <- gp.violin.esti3.sim1 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 3 - Main Effects and totXwait Interaction  
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim1, gp.violin.esti3.sim1, ncol = 2)
+```
+  
+Table 3 - Main Effects and totXwait Interaction  
+  
+```{r}
+df.sim1.est.table <- round(DT.summary.error,2)
+# set column names
+colnames(df.sim1.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim1.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors In Simulation Part One: Main Effects and totXwait Interaction
+There were 73 simulations with convergence errors and 1 simulation with a singular error.  Singular errors indicate that the model cannot be fit as specified and convergence errors indicate that the estimates produced by the model may not be reliable.  Either error is a problem, though the singular error could be considered more problematic in some ways than convergence errors.
+
+
+
+## Simulation Report Two: All Effects
+The same three sample sizes were simulated; *N* = 30, 200, and 300. The purpose of the simulation was to determine the power to detect all significant main effects and significant interactions. This simulation did not investigate any probability of detecting false positive interaction effects, but it did evaluate the estimation error.
+
+The main effects of each time pressure manipulation appeared in roughly 99% or more of the simulations for *N* = 200 and *N* = 300 (Table 4). The two-way interaction between the between-subjects effects **was** adequately powered with the proposed sample size, *N* = 300 (88%). If data exclusions yield a sample of *N* = 200, the two-way interaction between the between-subjects effects is no longer adequately powered (73%). The other interactions, including the three-way interaction, are adequately powered at either *N* = 300 or *N* = 200. 
+
+Figure 4 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time and the three-way interaction of the time pressure manipulations.  
+The estimation error is low for all effects. Figure 5 displays the estimation error for each simulation of the two interactions. Table 5 contains the average estimation error.  
+```{r eval = F}
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# Set the two-way interactions and 
+# the three-way interaction which 
+# were not included in the first simulation
+# to d = 0.5
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- raw_effect
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- raw_effect
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- raw_effect
+
+###################
+# Next simulation #
+###################
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results2 <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results2[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   'totXurg.estimate', 'totXurg.t.value', 'totXurg.p.value',
+                   'waitXurg.estimate', 'waitXurg.t.value', 'waitXurg.p.value',
+                   'totXwaitXurg.estimate', 'totXwaitXurg.t.value', 'totXwaitXurg.p.value',
+                   'sigma.estimate') := 
+                 LMM.sim.slope(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results2[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       totXurg_estimation_error = totXurg.estimate - params$beta.5,
+                       waitXurg_estimation_error = waitXurg.estimate - params$beta.6,
+                       totXwaitXurg_estimation_error = totXwaitXurg.estimate - params$beta.7,
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+write.csv(DT.sim.results2, "DT_sim_routeLength_power_results2.csv")
+```
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results2 <- data.table(read.csv("DT_sim_routeLength_power_results2.csv"))
+# set a factor to plot by sample size
+DT.sim.results2[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error2 <- DT.sim.results2[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+                                               "totXurg_estimation_error",
+                                               "waitXurg_estimation_error",
+                                               "totXwaitXurg_estimation_error",
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props2 <- DT.sim.results2[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value",
+                                               "totXurg.p.value",
+                                               "waitXurg.p.value",
+                                               "totXwaitXurg.p.value"),
+                                   by = n]
+```
+  
+Table 4 - All Effects  
+  
+```{r}
+df.sim2.p.table <- format(round(DT.summary.props2,2), nsmall=2)
+# set column names
+colnames(df.sim2.p.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg")
+# table of p value proportions
+kbl(df.sim2.p.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way_2 <- ggplot(DT.sim.results2)
+# add histograms
+gp.hist.2way_2 <- gp.hist.2way_2 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way_2 <- gp.hist.2way_2 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way_2 <- gp.hist.2way_2 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way_2 <- gp.hist.2way_2 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way_2 <- gp.hist.2way_2 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold', 'pink2'))
+# add axis labels
+gp.hist.2way_2 <- gp.hist.2way_2 + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way_2 <- gp.hist.2way_2 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way_2 <- gp.hist.2way_2 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way_2 <- gp.hist.2way_2 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way_2 <- ggplot(DT.sim.results2)
+# add histograms
+gp.hist.3way_2 <- gp.hist.3way_2 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way_2 <- gp.hist.3way_2 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way_2 <- gp.hist.3way_2 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way_2 <- gp.hist.3way_2 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way_2 <- gp.hist.3way_2 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way_2 <- gp.hist.3way_2 + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way_2 <- gp.hist.3way_2 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way_2 <- gp.hist.3way_2 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way_2 <- gp.hist.3way_2 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 4 - All Effects  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way_2, gp.hist.3way_2)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim2 <- ggplot(DT.sim.results2, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + geom_violin()
+# add data
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim2 <- gp.violin.esti2.sim2 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r}
+### 3-way effect ###
+gp.violin.esti3.sim2 <- ggplot(DT.sim.results2, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + geom_violin()
+# add data
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim2 <- gp.violin.esti3.sim2 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 5 - All Effects  
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim2, gp.violin.esti3.sim2, ncol = 2)
+```
+  
+Table 5 - All Effects  
+  
+```{r}
+df.sim2.est.table <- round(DT.summary.error2,2)
+# set column names
+colnames(df.sim2.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim2.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors in Simulation Report Part Two  
+For the data that was simulated with all the interaction effects, there were 70 simulations with convergence errors and 3 simulations with singular errors.  
+
+
+## Simulation Report Part Three
+### All main effects + totXwait interaction
+For this simulation, the random slope (urgency by participant) was in the simulated data but excluded from the model.
+
+The main effects of each time pressure manipulation appeared in roughly 99% or more of the simulations for *N* = 200 and *N* = 300 (Table 6). The two-way interaction between the between-subjects effects was not adequately powered with the proposed sample size, *N* = 300 (51%).
+
+Figure 6 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time and the three-way interaction of the time pressure manipulations.  
+The estimation error is low for all effects. Figure 7 displays the estimation error for each simulation of the two interactions. Table 7 contains the average estimation error.  
+```{r}
+###############################################
+####       function to simulate data       ####
+# With Random Slope for Participant ~ Urgency #
+# only b/w Ss interaction in simulated data   #
+# and random slope excluded from the model    #
+###############################################
+LMM.sim.noslope <- function(DT.bw.fact, params, n){
+  
+# make DT with bw Ss conditions and IDs
+suppressWarnings(DT.bw <- cbind(CJ(ID = factor(paste('S', 1:n, sep = ''))), DT.bw.fact))
+
+# make DT with all map numbers for each Ss
+DT.map <- CJ(ID = factor(paste('S', 1:n, sep = '')),
+             mapID = as.character(factor(paste('Map', 1:params$n.reps))))
+
+# merge DT bw and DT maps
+DT.merge <- merge(DT.bw, DT.map, by = "ID")
+  
+# draw one random intercept for each mapID and add it to the data.table
+# by using merge the one random intercept per mapID will be added to each
+# observation belonging to that mapID
+DT <- merge(DT.merge, 
+             data.table(mapID = unique(DT.merge$mapID), 
+                        u.1.i = rnorm(params$n.reps, 0, params$sigma.u.1)), 
+             by = 'mapID')
+# draw one random intercept and one random slope from a multivariate normal dist
+# for each pID and add it to the data.table
+# by using merge the one random intercept and slope per pID will be added to each
+# observation belonging to that participant
+DT <- merge(DT, 
+           data.table(ID = unique(DT$ID),
+                      setNames(data.table(
+                        mvrnorm(n,
+                                mu = c(0,0),
+                                Sigma=rbind(c(params$sigma.u.0^2, 
+                                              params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3),
+                                            c(params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3, 
+                                              params$sigma.u.3^2)
+                                ))), 
+                        c('u.0.i', 'u.3.i'))
+           ),
+           by = 'ID')
+ 
+# generate a number of trials completed based on bw Ss conditions
+for (i in unique(DT$ID)){
+   loopIdData <- DT[which(DT$ID==i),]
+   tempTotCond <- loopIdData$totTime[1]
+   tempWaitCond <- loopIdData$waitTime[1]
+   
+   # set a random normal number of maps for participant i based on condition
+   if (tempTotCond == "35mins" & tempWaitCond == "shortWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=45, sd=20))}
+   if ((tempTotCond == "35mins" & tempWaitCond == "longWaits") |
+       (tempTotCond == "25mins" & tempWaitCond == "shortWaits")){
+     nummaps <- trunc(rnorm(n=1, mean=40, sd=20))}
+   if (tempTotCond == "25mins" & tempWaitCond == "longWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=35, sd=20))
+     # if map number is too low, set it higher
+     if (nummaps < 5){
+       nummaps = rnorm(1,mean=15,sd=2)
+     }
+    # if the random higher is still too low, one more time
+    if (nummaps < 10){
+      nummaps <- nummaps*(nummaps/2)
+ }
+}
+# add a number of maps to column
+DT$nummaps[ DT$ID == i ] <- rep(nummaps,120)
+
+}
+
+# drop trials so each Ss has the correct number of map trials
+DT <- subset(DT, as.integer(substr(mapID,5,nchar(mapID))) <= nummaps)
+
+# add the urgency condition
+DT[, urgency_num := (sample(c(0,1), 
+                            replace=TRUE, 
+                            size=nrow(DT), 
+                            prob = c(0.4, 0.6)))]
+
+# create a factor urgency
+DT[, urgency := factor(ifelse(urgency_num==1, 'urgent','not_urgent')),]
+# set the reference level for urgency
+DT$urgency <- factor(DT$urgency, levels = c('not_urgent', 'urgent'))
+
+# draw random residuals for every observation
+DT[, e.ij := rnorm(.N, 0, params$sigma.epsilon)]
+# calculate simulated outcome
+DT[, y := abs(params$beta.0 + 
+     params$beta.1 * (totTime == '25mins') +
+     params$beta.2 * (waitTime == 'longWaits') +
+     params$beta.3 * (urgency == 'urgent') +
+     params$beta.4 * (totTime == '25mins') * (waitTime == 'longWaits') +
+     params$beta.5 * (totTime == '25mins') * (urgency == 'urgent') +
+     params$beta.6 * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     params$beta.7 * (totTime == '25mins') * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     u.0.i + 
+     u.1.i +
+     u.3.i * (urgency == 'urgent') +
+     e.ij)]
+
+
+#### fit model to the simulated data ####
+
+#### estimate the model of the simulated data ####
+
+# the models can fail to converge, thus, they are wrapped in a try and catch block
+tryCatch(
+  {
+    # calculate random intercept model (check estimates of fixed and random effects)
+    lmermodel <- lmer(y ~ totTime*waitTime*urgency + (1|ID) + (1|mapID), data = DT)
+    #print(linearMixedEffectsModel <- lmer(y ~ x1 * x2 + (x1 + x2 | ID), data = DT))
+  },
+  # in case that an error occurred, the model could would not even be estimated
+  error = function() {
+    # write out error message
+    message("The model could not be estimated. Collect more data!")
+  }
+)
+
+# check if the model was calculated
+if (exists('lmermodel')) {
+  # check for the absence of warning messages
+  if (is.null(lmermodel@optinfo$conv$lme4$messages)){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # check for a singular fit
+  } else if (is.null(lmermodel@optinfo$conv$lme4$code)){
+    # check for singular fit
+    if (lmermodel@optinfo$conv$lme4$messages == "boundary (singular) fit: see ?isSingular") {
+      # write out error message
+      message("The model is singular, the random effects are too complex to be fitted. Collect more data!")
+
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    } else {
+      # write out error message
+      message("You are having problems I did not foresee!")
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    }
+    # check for further convergence issues
+  } else if (lmermodel@optinfo$conv$lme4$code == -1){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # write out warning message
+    message("There are convergence issues. Try to rescale the data or collect more data!")
+
+  } else {
+    # write out error message
+    message("You are having problems I did not foresee!")
+    # store NAs rather than the fitted data
+    DT[, y.hat := NA]
+  }
+} else { # if the model does not exist
+  # store NAs rather than the fitted data
+  DT[, y.hat := NA]
+}
+
+lmer.eval <- summary(lmermodel)
+lmer.pvalue <- anova(lmermodel, type = 2)
+
+# store parameters of interest from simulation and original values
+# combine with previous simulation results
+temp_list <- list(
+  totTime.estimate = lmer.eval$coefficients[2],
+  totTime.t.value = lmer.eval$coefficients[2, "t value"],
+  totTime.p.value = lmer.pvalue$`Pr(>F)`[1],
+  
+  waitTime.estimate = lmer.eval$coefficients[3],
+  waitTime.t.value = lmer.eval$coefficients[3, "t value"],
+  waitTime.p.value = lmer.pvalue$`Pr(>F)`[2],
+  
+  urgency.estimate = lmer.eval$coefficients[4],
+  urgency.t.value = lmer.eval$coefficients[4, "t value"],
+  urgency.p.value = lmer.pvalue$`Pr(>F)`[3],
+  
+  totXwait.estimate = lmer.eval$coefficients[5],
+  totXwait.t.value = lmer.eval$coefficients[5, "t value"],
+  totXwait.p.value = lmer.pvalue$`Pr(>F)`[4],
+  
+  totXurg.estimate = lmer.eval$coefficients[6],
+  totXurg.t.value = lmer.eval$coefficients[6, "t value"],
+  totXurg.p.value = lmer.pvalue$`Pr(>F)`[5],
+  
+  waitXurg.estimate = lmer.eval$coefficients[7],
+  waitXurg.t.value = lmer.eval$coefficients[7, "t value"],
+  waitXurg.p.value = lmer.pvalue$`Pr(>F)`[6],
+  
+  totXwaitXurg.estimate = lmer.eval$coefficients[8],
+  totXwaitXurg.t.value = lmer.eval$coefficients[8, "t value"],
+  totXwaitXurg.p.value = lmer.pvalue$`Pr(>F)`[7],
+  
+  sigma.estimate = lmer.eval$sigma
+)
+
+}
+```
+
+```{r eval = F}
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# Set the two-way interactions and 
+# the three-way interaction which 
+# were not included in the first simulation
+# to d = 0
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- 0
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- 0
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- 0
+
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results3 <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results3[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   'totXurg.estimate', 'totXurg.t.value', 'totXurg.p.value',
+                   'waitXurg.estimate', 'waitXurg.t.value', 'waitXurg.p.value',
+                   'totXwaitXurg.estimate', 'totXwaitXurg.t.value', 'totXwaitXurg.p.value',
+                   'sigma.estimate') := 
+                 LMM.sim.noslope(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results3[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       totXurg_estimation_error = totXurg.estimate - params$beta.5,
+                       waitXurg_estimation_error = waitXurg.estimate - params$beta.6,
+                       totXwaitXurg_estimation_error = totXwaitXurg.estimate - params$beta.7,
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+write.csv(DT.sim.results3, "DT_sim_routeLength_power_results3.csv")
+```
+
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results3 <- data.table(read.csv("DT_sim_routeLength_power_results3.csv"))
+# set a factor to plot by sample size
+DT.sim.results3[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error3 <- DT.sim.results3[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+                                               "totXurg_estimation_error",
+                                               "waitXurg_estimation_error",
+                                               "totXwaitXurg_estimation_error",
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props3 <- DT.sim.results3[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value",
+                                               "totXurg.p.value",
+                                               "waitXurg.p.value",
+                                               "totXwaitXurg.p.value"),
+                                   by = n]
+```
+  
+Table 6 - Main Effects and totXwait Interaction (no urg slope in model)  
+  
+```{r}
+df.sim1.p.table3 <- format(round(DT.summary.props3,2), nsmall=2)
+# set column names
+colnames(df.sim1.p.table3) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg")
+# table of p value proportions
+kbl(df.sim1.p.table3, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way3 <- ggplot(DT.sim.results3)
+# add histograms
+gp.hist.2way3 <- gp.hist.2way3 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way3 <- gp.hist.2way3 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way3 <- gp.hist.2way3 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way3 <- gp.hist.2way3 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way3 <- gp.hist.2way3 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.2way3 <- gp.hist.2way3 + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way3 <- gp.hist.2way3 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way3 <- gp.hist.2way3 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way3 <- gp.hist.2way3 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way3 <- ggplot(DT.sim.results3)
+# add histograms
+gp.hist.3way3 <- gp.hist.3way3 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way3 <- gp.hist.3way3 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way3 <- gp.hist.3way3 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way3 <- gp.hist.3way3 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way3 <- gp.hist.3way3 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way3 <- gp.hist.3way3 + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way3 <- gp.hist.3way3 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way3 <- gp.hist.3way3 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way3 <- gp.hist.3way3 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 6 - Main Effects and totXwait Interaction (no urg slope in model)  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way3, gp.hist.3way3)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim3 <- ggplot(DT.sim.results3, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + geom_violin()
+# add data
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim3 <- gp.violin.esti2.sim3 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r}
+### 3-way effect ###
+gp.violin.esti3.sim3 <- ggplot(DT.sim.results3, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + geom_violin()
+# add data
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim3 <- gp.violin.esti3.sim3 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 7 - Main Effects and totXwait Interaction (no urg slope in model)
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim3, gp.violin.esti3.sim3, ncol = 2)
+```
+  
+Table 7 - Main Effects and totXwait Interaction  
+  
+```{r}
+df.sim3.est.table <- round(DT.summary.error3,2)
+# set column names
+colnames(df.sim3.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim3.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors In Simulation Part Three: Main Effects and totXwait Interaction
+There were 26 simulations with convergence errors and no simulation with a singular error.  
+
+
+
+
+
+
+## Simulation Report Part Four  
+### Reduced model complexity
+
+The main effects of each time pressure manipulation appeared in roughly 99% or more of the simulations for *N* = 200 and *N* = 300 (Table 8). The two-way interaction between the between-subjects effects not not adequately powered with the proposed sample size, *N* = 300 (57%).
+
+Figure 8 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time.  
+The estimation error is low for all effects. Figure 9 displays the estimation error for each simulation of the two interactions. Table 9 contains the average estimation error.  
+```{r}
+###############################################
+####       function to simulate data       ####
+# With Random Slope for Participant ~ Urgency #
+# only b/w Ss interaction in simulated data   #
+###############################################
+LMM.sim.noextrainteractions <- function(DT.bw.fact, params, n){
+  
+# make DT with bw Ss conditions and IDs
+suppressWarnings(DT.bw <- cbind(CJ(ID = factor(paste('S', 1:n, sep = ''))), DT.bw.fact))
+
+# make DT with all map numbers for each Ss
+DT.map <- CJ(ID = factor(paste('S', 1:n, sep = '')),
+             mapID = as.character(factor(paste('Map', 1:params$n.reps))))
+
+# merge DT bw and DT maps
+DT.merge <- merge(DT.bw, DT.map, by = "ID")
+  
+# draw one random intercept for each mapID and add it to the data.table
+# by using merge the one random intercept per mapID will be added to each
+# observation belonging to that mapID
+DT <- merge(DT.merge, 
+             data.table(mapID = unique(DT.merge$mapID), 
+                        u.1.i = rnorm(params$n.reps, 0, params$sigma.u.1)), 
+             by = 'mapID')
+# draw one random intercept and one random slope from a multivariate normal dist
+# for each pID and add it to the data.table
+# by using merge the one random intercept and slope per pID will be added to each
+# observation belonging to that participant
+DT <- merge(DT, 
+           data.table(ID = unique(DT$ID),
+                      setNames(data.table(
+                        mvrnorm(n,
+                                mu = c(0,0),
+                                Sigma=rbind(c(params$sigma.u.0^2, 
+                                              params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3),
+                                            c(params$cor.u.0.u.3 * params$sigma.u.0 *
+                                                 params$sigma.u.3, 
+                                              params$sigma.u.3^2)
+                                ))), 
+                        c('u.0.i', 'u.3.i'))
+           ),
+           by = 'ID')
+ 
+# generate a number of trials completed based on bw Ss conditions
+for (i in unique(DT$ID)){
+   loopIdData <- DT[which(DT$ID==i),]
+   tempTotCond <- loopIdData$totTime[1]
+   tempWaitCond <- loopIdData$waitTime[1]
+   
+   # set a random normal number of maps for participant i based on condition
+   if (tempTotCond == "35mins" & tempWaitCond == "shortWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=45, sd=20))}
+   if ((tempTotCond == "35mins" & tempWaitCond == "longWaits") |
+       (tempTotCond == "25mins" & tempWaitCond == "shortWaits")){
+     nummaps <- trunc(rnorm(n=1, mean=40, sd=20))}
+   if (tempTotCond == "25mins" & tempWaitCond == "longWaits"){
+     nummaps <- trunc(rnorm(n=1, mean=35, sd=20))
+     # if map number is too low, set it higher
+     if (nummaps < 5){
+       nummaps = rnorm(1,mean=15,sd=2)
+     }
+    # if the random higher is still too low, one more time
+    if (nummaps < 10){
+      nummaps <- nummaps*(nummaps/2)
+ }
+}
+# add a number of maps to column
+DT$nummaps[ DT$ID == i ] <- rep(nummaps,120)
+
+}
+
+# drop trials so each Ss has the correct number of map trials
+DT <- subset(DT, as.integer(substr(mapID,5,nchar(mapID))) <= nummaps)
+
+# add the urgency condition
+DT[, urgency_num := (sample(c(0,1), 
+                            replace=TRUE, 
+                            size=nrow(DT), 
+                            prob = c(0.4, 0.6)))]
+
+# create a factor urgency
+DT[, urgency := factor(ifelse(urgency_num==1, 'urgent','not_urgent')),]
+# set the reference level for urgency
+DT$urgency <- factor(DT$urgency, levels = c('not_urgent', 'urgent'))
+
+# draw random residuals for every observation
+DT[, e.ij := rnorm(.N, 0, params$sigma.epsilon)]
+# calculate simulated outcome
+DT[, y := abs(params$beta.0 + 
+     params$beta.1 * (totTime == '25mins') +
+     params$beta.2 * (waitTime == 'longWaits') +
+     params$beta.3 * (urgency == 'urgent') +
+     params$beta.4 * (totTime == '25mins') * (waitTime == 'longWaits') +
+     params$beta.5 * (totTime == '25mins') * (urgency == 'urgent') +
+     params$beta.6 * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     params$beta.7 * (totTime == '25mins') * (waitTime == 'longWaits') * (urgency == 'urgent') +
+     u.0.i + 
+     u.1.i +
+     u.3.i * (urgency == 'urgent') +
+     e.ij)]
+
+
+#### fit model to the simulated data ####
+
+#### estimate the model of the simulated data ####
+
+# the models can fail to converge, thus, they are wrapped in a try and catch block
+tryCatch(
+  {
+    # calculate random intercept model (check estimates of fixed and random effects)
+    lmermodel <- lmer(y ~ totTime*waitTime + urgency + (urgency|ID) + (1|mapID), data = DT)
+    #print(linearMixedEffectsModel <- lmer(y ~ x1 * x2 + (x1 + x2 | ID), data = DT))
+  },
+  # in case that an error occurred, the model could would not even be estimated
+  error = function() {
+    # write out error message
+    message("The model could not be estimated. Collect more data!")
+  }
+)
+
+# check if the model was calculated
+if (exists('lmermodel')) {
+  # check for the absence of warning messages
+  if (is.null(lmermodel@optinfo$conv$lme4$messages)){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # check for a singular fit
+  } else if (is.null(lmermodel@optinfo$conv$lme4$code)){
+    # check for singular fit
+    if (lmermodel@optinfo$conv$lme4$messages == "boundary (singular) fit: see ?isSingular") {
+      # write out error message
+      message("The model is singular, the random effects are too complex to be fitted. Collect more data!")
+
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    } else {
+      # write out error message
+      message("You are having problems I did not foresee!")
+      # store NAs rather than the fitted data
+      DT[, y.hat := NA]
+    }
+    # check for further convergence issues
+  } else if (lmermodel@optinfo$conv$lme4$code == -1){
+    # model evaluation 1
+    #print(summary(lmermodel))
+    # model evaluation 2
+    #print(Anova(lmermodel))
+    # store estimated data in the data.table
+    DT[, y.hat := fitted(lmermodel)]
+    # write out warning message
+    message("There are convergence issues. Try to rescale the data or collect more data!")
+
+  } else {
+    # write out error message
+    message("You are having problems I did not foresee!")
+    # store NAs rather than the fitted data
+    DT[, y.hat := NA]
+  }
+} else { # if the model does not exist
+  # store NAs rather than the fitted data
+  DT[, y.hat := NA]
+}
+
+lmer.eval <- summary(lmermodel)
+lmer.pvalue <- anova(lmermodel, type = 2)
+
+# store parameters of interest from simulation and original values
+# combine with previous simulation results
+temp_list <- list(
+  totTime.estimate = lmer.eval$coefficients[2],
+  totTime.t.value = lmer.eval$coefficients[2, "t value"],
+  totTime.p.value = lmer.pvalue$`Pr(>F)`[1],
+  
+  waitTime.estimate = lmer.eval$coefficients[3],
+  waitTime.t.value = lmer.eval$coefficients[3, "t value"],
+  waitTime.p.value = lmer.pvalue$`Pr(>F)`[2],
+  
+  urgency.estimate = lmer.eval$coefficients[4],
+  urgency.t.value = lmer.eval$coefficients[4, "t value"],
+  urgency.p.value = lmer.pvalue$`Pr(>F)`[3],
+  
+  totXwait.estimate = lmer.eval$coefficients[5],
+  totXwait.t.value = lmer.eval$coefficients[5, "t value"],
+  totXwait.p.value = lmer.pvalue$`Pr(>F)`[4],
+  
+  sigma.estimate = lmer.eval$sigma
+)
+
+}
+```
+
+```{r eval = F}
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# Set the two-way interactions with urgency and 
+# the three-way interaction to d = 0
+# only main effects and two-way b/w Ss interaction
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- 0
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- 0
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- 0
+
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results4 <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results4[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   
+                   'sigma.estimate') := 
+                 LMM.sim.noextrainteractions(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results4[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+write.csv(DT.sim.results4, "DT_sim_routeLength_power_results4.csv")
+```
+
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results4 <- data.table(read.csv("DT_sim_routeLength_power_results4.csv"))
+# set a factor to plot by sample size
+DT.sim.results4[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error4 <- DT.sim.results4[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props4 <- DT.sim.results4[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value"),
+                                   by = n]
+```
+  
+Table 8 - Main Effects and totXwait Interaction (no extra interactions in model)  
+  
+```{r}
+df.sim4.p.table <- format(round(DT.summary.props4,2), nsmall=2)
+# set column names
+colnames(df.sim4.p.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait")
+# table of p value proportions
+kbl(df.sim4.p.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way4 <- ggplot(DT.sim.results4)
+# add histograms
+gp.hist.2way4 <- gp.hist.2way4 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way4 <- gp.hist.2way4 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way4 <- gp.hist.2way4 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way4 <- gp.hist.2way4 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way4 <- gp.hist.2way4 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.2way4 <- gp.hist.2way4 + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way4 <- gp.hist.2way4 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way4 <- gp.hist.2way4 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way4 <- gp.hist.2way4 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r eval = F}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way4 <- ggplot(DT.sim.results4)
+# add histograms
+gp.hist.3way4 <- gp.hist.3way4 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way4 <- gp.hist.3way4 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way4 <- gp.hist.3way4 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way4 <- gp.hist.3way4 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way4 <- gp.hist.3way4 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way4 <- gp.hist.3way4 + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way4 <- gp.hist.3way4 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way4 <- gp.hist.3way4 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way4 <- gp.hist.3way4 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 8 - Main Effects and totXwait Interaction (no extra interactions in model)  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way4)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim4 <- ggplot(DT.sim.results4, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + geom_violin()
+# add data
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim4 <- gp.violin.esti2.sim4 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r eval = F}
+### 3-way effect ###
+gp.violin.esti3.sim4 <- ggplot(DT.sim.results4, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + geom_violin()
+# add data
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim4 <- gp.violin.esti3.sim4 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 9 - Main Effects and totXwait Interaction (no extra interactions)
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim4, ncol = 1)
+```
+  
+Table 9 - Main Effects and totXwait Interaction  
+  
+```{r}
+df.sim4.est.table <- round(DT.summary.error4,2)
+# set column names
+colnames(df.sim4.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim4.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors In Simulation Part Four: Main Effects and totXwait Interaction
+There were 69 simulations with convergence errors and no simulation with a singular error.  
+
+
+
+
+
+
+
+## Simulation Report Five
+Three sample sizes were simulated; *N* = 30, 200, and 300. The purpose of the simulation was to determine the power to detect significant main effects, a significant two-way interaction between total time and waiting time, and a significant two-way interaction between total time and urgecy. The simulation additionally determined the probability of detecting false positive interaction effects (urgency x wait time; urgency x total time x wait time) and evaluated the estimation error. Type 2 sum of squares with Sattherwaite approximations was used to test statistical significance. Type 3 sum of squares would be used when reporting significant interaction parameters.
+
+The main effects of each time pressure manipulation appeared in roughly 99% or more of the simulations for *N* = 200 and *N* = 300 (Table 10). The two-way interaction between the between-subjects effects was **not** adequately powered with the proposed sample size, *N* = 300 (51%).  
+
+The two-way interaction between wait time and urgency and the three-way interaction were not included in the model.  The likelihood of detecting a an effect that does not exist was 5% or less. Figure 10 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time and the three-way interaction of the time pressure manipulations. Figure 11 displays the estimation error for each simulation of the two interactions. Table 11 contains the average estimation error.  
+
+
+```{r eval = F}
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# Set one two-way interaction (total time X urgency)  
+# to d = 0.5
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- raw_effect
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- 0
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- 0
+
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results5 <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results5[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   'totXurg.estimate', 'totXurg.t.value', 'totXurg.p.value',
+                   'waitXurg.estimate', 'waitXurg.t.value', 'waitXurg.p.value',
+                   'totXwaitXurg.estimate', 'totXwaitXurg.t.value', 'totXwaitXurg.p.value',
+                   'sigma.estimate') := 
+                 LMM.sim.slope(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results5[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       totXurg_estimation_error = totXurg.estimate - params$beta.5,
+                       waitXurg_estimation_error = waitXurg.estimate - params$beta.6,
+                       totXwaitXurg_estimation_error = totXwaitXurg.estimate - params$beta.7,
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+write.csv(DT.sim.results5, "DT_sim_routeLength_power_results5.csv")
+```
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results5 <- data.table(read.csv("DT_sim_routeLength_power_results5.csv"))
+# set a factor to plot by sample size
+DT.sim.results5[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error5 <- DT.sim.results5[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+                                               "totXurg_estimation_error",
+                                               "waitXurg_estimation_error",
+                                               "totXwaitXurg_estimation_error",
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props5 <- DT.sim.results5[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value",
+                                               "totXurg.p.value",
+                                               "waitXurg.p.value",
+                                               "totXwaitXurg.p.value"),
+                                   by = n]
+```
+  
+Table 10 - Main Effects, totXwait and totXurg Interaction  
+  
+```{r}
+df.sim5.p.table <- format(round(DT.summary.props5,2), nsmall=2)
+# set column names
+colnames(df.sim5.p.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg")
+# table of p value proportions
+kbl(df.sim5.p.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way5 <- ggplot(DT.sim.results5)
+# add histograms
+gp.hist.2way5 <- gp.hist.2way5 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way5 <- gp.hist.2way5 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way5 <- gp.hist.2way5 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way5 <- gp.hist.2way5 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way5 <- gp.hist.2way5 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.2way5 <- gp.hist.2way5 + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way5 <- gp.hist.2way5 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way5 <- gp.hist.2way5 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way5 <- gp.hist.2way5 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way5 <- ggplot(DT.sim.results5)
+# add histograms
+gp.hist.3way5 <- gp.hist.3way5 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way5 <- gp.hist.3way5 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way5 <- gp.hist.3way5 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way5 <- gp.hist.3way5 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way5 <- gp.hist.3way5 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way5 <- gp.hist.3way5 + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way5 <- gp.hist.3way5 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way5 <- gp.hist.3way5 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way5 <- gp.hist.3way5 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 10 - Main Effects and totXwait Interaction  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way5, gp.hist.3way5)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim5 <- ggplot(DT.sim.results5, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + geom_violin()
+# add data
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim5 <- gp.violin.esti2.sim5 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r}
+### 3-way effect ###
+gp.violin.esti3.sim5 <- ggplot(DT.sim.results5, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + geom_violin()
+# add data
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim5 <- gp.violin.esti3.sim5 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 11 - Main Effects, totXwait and totXurg Interactions  
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim5, gp.violin.esti3.sim5, ncol = 2)
+```
+  
+Table 11 - Main Effects, totXwait and totXurg Interactions  
+  
+```{r}
+df.sim5.est.table <- round(DT.summary.error5,2)
+# set column names
+colnames(df.sim5.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim5.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors In Simulation Part Five: Main Effects, totXwait and totXurg Interactions
+There were 83 simulations with convergence errors and no simulation with a singular error.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Simulation Report Six
+Three sample sizes were simulated; *N* = 30, 200, and 300. The purpose of the simulation was to determine the power to detect significant main effects and the probability of detecting false positive interaction effects, as well as examining estimation error. Type 2 sum of squares with Sattherwaite approximations was used to test statistical significance.
+
+The main effects of each time pressure manipulation appeared in 86% or more of the simulations for *N* = 200 and 96% or more of the simulations for *N* = 300 (Table 12).  
+
+No interactions were included in the model.  The likelihood of detecting any single effect that did not exist was 6% or less. Figure 12 displays the number of significant *p*-values for the between-subjects interaction of total time and waiting time and the three-way interaction of the time pressure manipulations. Figure 13 displays the estimation error for each simulation of the two interactions. Table 13 contains the average estimation error.  
+
+
+```{r eval = F}
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# Set all interaction terms to d = 0 
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+# slope of the fourth predictor, the interaction between total time and wait time
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits or vice versa
+params$beta.4 <- 0
+# slope of the fifth predictor, the interaction between total time and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from not urgent to urgent or vice versa
+params$beta.5 <- 0
+# slope of the sixth predictor, the interaction between wait time and urgency
+# the change in the difference between either short waits and long waits with
+# a change from not urgent to urgent or vice versa
+params$beta.6 <- 0
+# slope of the seventh predictor, the interaction between total time, wait time, and urgency
+# the change in the difference between either 35 and 25 minutes with
+# a change from short waits to long waits and
+# a change from not urgent to urgent or vice versa
+params$beta.7 <- 0
+
+# sample sizes
+params$n.set <- c(30, 200, 300)
+# store the number of repetitions for the simulation (should usually be around 10.000)
+params$n.sims <- 1000
+
+# create data.table where each row is one simulation for one parameter values of interest
+DT.sim.results6 <- CJ(sim.no = 1:params$n.sims,
+                     n = params$n.set)
+                     
+# for each simulation and sample size call the function to do the simulation
+DT.sim.results6[, c('totTime.estimate', 'totTime.t.value', 'totTime.p.value',
+                   'waitTime.estimate', 'waitTime.t.value', 'waitTime.p.value',
+                   'urgency.estimate', 'urgency.t.value', 'urgency.p.value',
+                   'totXwait.estimate', 'totXwait.t.value', 'totXwait.p.value',
+                   'totXurg.estimate', 'totXurg.t.value', 'totXurg.p.value',
+                   'waitXurg.estimate', 'waitXurg.t.value', 'waitXurg.p.value',
+                   'totXwaitXurg.estimate', 'totXwaitXurg.t.value', 'totXwaitXurg.p.value',
+                   'sigma.estimate') := 
+                 LMM.sim.slope(DT.bw.fact = DT.bw.fact, 
+                               params = params, n = n), 
+               by = .(sim.no, n)]
+# calculate estimation errors
+DT.sim.results6[, ':=' (totTime_estimation_error = totTime.estimate - params$beta.1,
+                       waitTime_estimation_error = waitTime.estimate - params$beta.2,
+                       urgency_estimation_error = urgency.estimate - params$beta.3,
+                       totXwait_estimation_error = totXwait.estimate - params$beta.4,
+                       totXurg_estimation_error = totXurg.estimate - params$beta.5,
+                       waitXurg_estimation_error = waitXurg.estimate - params$beta.6,
+                       totXwaitXurg_estimation_error = totXwaitXurg.estimate - params$beta.7,
+                       sigma_estimation_error = sigma.estimate - params$sigma.epsilon)]
+
+# save simulated data
+write.csv(DT.sim.results6, "DT_sim_routeLength_power_results6.csv")
+```
+
+```{r}
+# set wd
+# setwd()
+# load data simulated with the random slope and 0.3 correlation b/w
+# participant random intercept and random slope of urgency
+DT.sim.results6 <- data.table(read.csv("DT_sim_routeLength_power_results6.csv"))
+# set a factor to plot by sample size
+DT.sim.results6[, n_fact := factor(n),]
+# calc average estimation errors
+DT.summary.error6 <- DT.sim.results6[, lapply(.SD, mean), 
+                                   .SDcols = c("totTime_estimation_error",
+                                               "waitTime_estimation_error",
+                                               "urgency_estimation_error",
+                                               "totXwait_estimation_error",
+                                               "totXurg_estimation_error",
+                                               "waitXurg_estimation_error",
+                                               "totXwaitXurg_estimation_error",
+                                               "sigma_estimation_error"),
+                                   by = n]
+
+
+# calc proportions of significant p values
+DT.summary.props6 <- DT.sim.results6[, lapply(.SD, propFun),
+                                   .SDcols = c("totTime.p.value",
+                                               "waitTime.p.value",
+                                               "urgency.p.value",
+                                               "totXwait.p.value",
+                                               "totXurg.p.value",
+                                               "waitXurg.p.value",
+                                               "totXwaitXurg.p.value"),
+                                   by = n]
+```
+  
+Table 12 - Main Effects, No Interactions  
+  
+```{r}
+df.sim6.p.table <- format(round(DT.summary.props6,2), nsmall=2)
+# set column names
+colnames(df.sim6.p.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg")
+# table of p value proportions
+kbl(df.sim6.p.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Proportion of significant p-values in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+```{r}
+### two-way interaction p-values ###
+# ggplot data layer
+gp.hist.2way6 <- ggplot(DT.sim.results6)
+# add histograms
+gp.hist.2way6 <- gp.hist.2way6 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwait.p.value, 
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.2way6 <- gp.hist.2way6 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.2way6 <- gp.hist.2way6 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.2way6 <- gp.hist.2way6 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.2way6 <- gp.hist.2way6 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.2way6 <- gp.hist.2way6 + xlab("Total Time x Wait Time Interaction")
+gp.hist.2way6 <- gp.hist.2way6 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.2way6 <- gp.hist.2way6 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.2way6 <- gp.hist.2way6 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+
+```{r}
+### three-way interaction p-values ###
+# ggplot data layer
+gp.hist.3way6 <- ggplot(DT.sim.results6)
+# add histograms
+gp.hist.3way6 <- gp.hist.3way6 + geom_histogram(position = "dodge", bins = 15,
+                                              aes(x = totXwaitXurg.p.value,
+                                                  fill = n_fact))
+# add vert line for sig value
+gp.hist.3way6 <- gp.hist.3way6 + geom_vline(aes(xintercept = 0.05), 
+                                          color = "red", size = 1) 
+# add horizontal line for number of p-values expected w/o effect
+gp.hist.3way6 <- gp.hist.3way6 + geom_hline(aes(yintercept = (1000*0.05)), 
+                                          color = "blue", size = 1) 
+# set theme tufte
+gp.hist.3way6 <- gp.hist.3way6 + theme_tufte(base_size = 11, base_family = "sans") 
+# format legend and colors
+gp.hist.3way6 <- gp.hist.3way6 + scale_fill_manual(name = "Sample Size",
+                              labels = c('N = 30',
+                                         'N = 200',
+                                         'N = 300'),
+                              values = c('lightblue', 'palegreen',
+                                         'gold'))
+# add axis labels
+gp.hist.3way6 <- gp.hist.3way6 + xlab("Total Time x Wait Time x Urgency Interaction")
+gp.hist.3way6 <- gp.hist.3way6 + ylab("Number of Significant P-values")
+# add caption
+gp.hist.3way6 <- gp.hist.3way6 + labs(caption = 
+      "Of 1000 simulations, the number of significant p-values for each sample size. \n
+      Simulations to the left of the red line are significant. \n
+      The blue line is the expected number of significant p-values if there were no effect.")
+# align caption
+gp.hist.3way6 <- gp.hist.3way6 + theme(plot.caption = element_text(hjust = 0, lineheight = 0.5))
+```
+  
+Figure 10 - Main Effects and totXwait Interaction  
+  
+```{r fig.width=7, fig.height=6}
+ggarrange(gp.hist.2way6, gp.hist.3way6)
+```
+
+
+```{r}
+### 2-way effect ###
+gp.violin.esti2.sim6 <- ggplot(DT.sim.results6, aes(x = n_fact, y = totXwait_estimation_error))
+
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + geom_violin()
+# add data
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25, 
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + ylab('Estimation Error for Total Time x Wait Time')
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + xlab('Sample Size')
+# add caption
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + labs(caption = 
+      "Estimation error for 1000 simulations of each sample size.")
+# set theme
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti2.sim6 <- gp.violin.esti2.sim6 + coord_cartesian(ylim = c(-15,15))
+```
+
+```{r}
+### 3-way effect ###
+gp.violin.esti3.sim6 <- ggplot(DT.sim.results6, aes(x = n_fact, y = totXwaitXurg_estimation_error))
+
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + geom_violin()
+# add data
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + geom_jitter(width = 0.1, 
+                                                           alpha = 0.25,
+                                                           colour = 'blue')
+# add horizontal line at 0
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + geom_hline(aes(yintercept = 0), 
+                                                        color = "black", size = 1)
+# add axis labels
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + ylab('Estimation Error for Total Time x Wait Time x Urgency')
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + xlab('Sample Size')
+
+# set theme
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + theme_tufte(base_size = 11, base_family = "sans")
+# align caption
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + theme(plot.caption = element_text(hjust = 0))
+# set coord
+gp.violin.esti3.sim6 <- gp.violin.esti3.sim6 + coord_cartesian(ylim = c(-15,15))
+```
+  
+  
+  
+  
+Figure 13 - Main Effects, No Interactions  
+  
+```{r fig.width=7, fig.height=4}
+ggarrange(gp.violin.esti2.sim6, gp.violin.esti3.sim6, ncol = 2)
+```
+  
+Table 13 - Main Effects, No Interactions  
+  
+```{r}
+df.sim6.est.table <- round(DT.summary.error6,2)
+# set column names
+colnames(df.sim6.est.table) <- c("Sample Size", "Total Time", "Wait Time", "Urgency",
+                               "TotalxWait", "TotalxUrg", "WaitxUrg", "TotalxWaitxUrg",
+                               "Residual")
+# table of p value proportions
+kbl(df.sim6.est.table, booktabs = T, align = c('r','r','r','r')) %>%
+    footnote(general = "Mean Estimation Error in 1000 simulations",
+             general_title = "Note.", footnote_as_chunk = T)
+
+```
+
+### Errors In Simulation Part Five: Main Effects, totXwait and totXurg Interactions
+There were 78 simulations with convergence errors and 1 simulation with a singular error.  
+
+
+
+
+
+# Summary
+Across five simulations, we determined the power of linear mixed-effects models to detect medium effects of proposed experimental manipulations on route length, assuming that the residuals will be approximately normally distributed.  Less than 3% of the simulations resulted in convergence errors or a model with singular fit, suggesting high likelihood that the proposed model, which includes 3 main effects and all possible interactions as well as a random slope for urgency by participant, will be applicable for data analysis.  
+  
+In general, the simulations suggested low likelihood of detecting false positive effects.  The highest possibility of detecting a false positive was when the random slope (urgency by participant) was excluded from the model (but remained present in the data) and only the interaction between total time and wait time was simulated, in addition to the main effects.  
+
+1. All simulations suggested that the study has adequate power to detect main effects of total time, waiting time, and urgency messaging that are of medium size (*d* = 0.5).  This medium effect size corresponds to a 1.75 unit difference in the length of the route traced.  
+
+2. If all main effects and all interactions are present in the data, the model will be powered to detect all main effects and interactions.  
+
+3. If the between-subjects interaction (total time X wait time) and one within/between interaction are in the data, the model the model will be powered to detect main effects and the interaction that includes the within-subjects factor, but not the interaction between between-subjects factors (total time X wait time).  
+
+4. If the between-subjects interaction (total time X wait time) is the only interaction in the data, the model will not have adequate power to reliably detect it.
+
+
+
+
